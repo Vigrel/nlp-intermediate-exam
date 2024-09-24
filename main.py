@@ -1,23 +1,40 @@
 import itertools
 import time
+
+import mlflow
 import numpy as np
 import pandas as pd
-import mlflow
-from sklearn.pipeline import Pipeline
-from sklearn.model_selection import StratifiedKFold, RandomizedSearchCV
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.linear_model import LogisticRegression
-from sklearn.naive_bayes import BernoulliNB
-from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
-from sklearn.utils import parallel_backend
 from joblib import Parallel, delayed
+from nltk.stem import WordNetLemmatizer
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import (accuracy_score, f1_score, precision_score,
+                             recall_score)
+from sklearn.model_selection import RandomizedSearchCV, StratifiedKFold
+from sklearn.naive_bayes import BernoulliNB
+from sklearn.pipeline import Pipeline
+from sklearn.utils import parallel_backend
 
-# Load and preprocess data
-def load_data(file_path):
-    data = pd.read_csv(file_path)
-    data['text'] = data['text'].astype("U")  # Ensure 'text' is unicode
-    return data
+
+def load_process_data() -> pd.DataFrame:
+    lemmatizer = WordNetLemmatizer()
+
+    train_df = pd.read_csv("data/fake-news/train.csv", index_col="id")
+    test_df = pd.read_csv("data/fake-news/test.csv", index_col="id")
+    test_df_label = pd.read_csv("data/fake-news/submit.csv", index_col="id")
+
+    test_df = test_df.join(test_df_label, on="id")
+    data = pd.concat([train_df, test_df])
+    data["text"] = data.text.values.astype("U")
+    data["label"] = data.label.values.astype("U")
+
+    def preprocess_text(text):
+        return " ".join([lemmatizer.lemmatize(word) for word in text.split()])
+
+    data["text"] = data.text.apply(preprocess_text)
+
+    return data[:, ["text", "label"]]
 
 # Evaluate a single pipeline using cross-validation
 def evaluate_pipeline(pipeline, X, y, n_splits=5):
@@ -120,8 +137,8 @@ def run_experiments(data, n_splits=5, n_jobs=-1):
         mlflow.sklearn.log_model(best_pipeline, artifact_path="best_model")
 
 if __name__ == "__main__":
-    # Load data
-    data = load_data("exp.csv")
-    
+    # data = load_process_data()
+    data = pd.read_csv("exp.csv")
+    data["text"] = data['text'].astype("U") 
     # Run experiments
     run_experiments(data, n_splits=5, n_jobs=-1)
